@@ -1,0 +1,95 @@
+#include <Servo.h> // Librería para controlar el servomotor
+Servo myServo;
+
+int sensorIR = 8;      // Pin del sensor IR
+int boton = 4;         // Pin del botón de parada
+bool puerta = false;   // Estado de la puerta (true = abierta, false = cerrada)
+bool procesoCerrar = false; // Indicador de proceso de cierre en curso
+
+void setup() {
+  myServo.attach(5);
+  pinMode(2, OUTPUT);      // LED verde
+  pinMode(3, OUTPUT);      // LED rojo
+  pinMode(sensorIR, INPUT);   // Sensor IR
+  pinMode(boton, INPUT_PULLUP); // Botón con resistencia de pull-up
+  onOffLeds();
+  Serial.begin(9600);
+}
+
+void loop() {
+  bool objetoDetectado = leerSensorIR();
+  bool botonPresionado = digitalRead(boton) == LOW; // Leer el estado del botón (LOW cuando está presionado)
+
+  if (botonPresionado && procesoCerrar) { // Si el botón es presionado durante el cierre
+    DetenerCierre(); // Detener el cierre y abrir la puerta
+    return; // Salir de este ciclo del loop
+  }
+
+  if (objetoDetectado && !puerta) { // Si detecta un objeto y la puerta está cerrada
+    abrirPuerta();
+    puerta = true;
+  } else if (!objetoDetectado && puerta && !procesoCerrar) { // Si no detecta objeto y la puerta está abierta
+    cerrarPuerta(); // Inicia el proceso de cierre
+    puerta = false;
+  }
+
+  delay(100); // Pequeño retraso para estabilidad
+}
+
+void DetenerCierre() { // Módulo para detener el cierre y abrir la puerta
+  Serial.println("Botón presionado: Deteniendo cierre y reabriendo la puerta.");
+  
+  abrirPuerta();     // Abre la puerta
+  puerta = true;     // Actualiza el estado de la puerta a abierta
+  procesoCerrar = false; // Asegura que no haya proceso de cierre en curso
+}
+
+void cerrarPuerta() { // Módulo para cerrar la puerta
+  digitalWrite(2, LOW);  // Apaga el LED verde
+  digitalWrite(3, HIGH); // Enciende el LED rojo
+  procesoCerrar = true;  // Marca que el proceso de cierre está en curso
+
+  for (int angulo = 0; angulo <= 90; angulo++) { // Cierra la puerta gradualmente
+    myServo.write(angulo);
+    delay(50);
+
+    if (digitalRead(boton) == LOW) { // Verifica si el botón fue presionado
+      DetenerCierre(); // Detiene el cierre y abre la puerta
+      delay(2000);
+      return;          // Sale del bucle de cierre
+    }
+  }
+
+  digitalWrite(3, LOW); // Apaga el LED rojo al final del cierre
+  procesoCerrar = false; // Marca el fin del proceso de cierre
+}
+
+void abrirPuerta() { // Módulo para abrir la puerta
+  digitalWrite(2, HIGH); // Enciende el LED verde
+
+  for (int angulo = 90; angulo >= 0; angulo--) { // Abre la puerta gradualmente
+    myServo.write(angulo);
+    delay(50);
+  }
+
+  digitalWrite(2, LOW); // Apaga el LED verde al final de la apertura
+}
+
+void onOffLeds() { // Módulo que hace los LEDs intermitentes al inicio de cada proceso
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(2, HIGH);
+    digitalWrite(3, HIGH);
+    delay(100);
+    digitalWrite(2, LOW);
+    digitalWrite(3, LOW);
+    delay(100);
+  }
+}
+
+bool leerSensorIR() { // Módulo que lee el estado del sensor IR
+  int estado = digitalRead(sensorIR); // Lee el estado del sensor IR (HIGH = objeto detectado, LOW = no detectado)
+  Serial.print("Objeto detectado: ");
+  Serial.println(estado == HIGH ? "Sí" : "No");
+
+  return (estado == HIGH); // Retorna true si el sensor detecta un objeto
+}
